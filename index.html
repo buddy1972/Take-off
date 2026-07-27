@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TakeOff — Automatic Material Take-Off</title>
+<style>
+  :root{--bg:#0f1419;--panel:#1a222c;--panel2:#212c38;--line:#2c3846;--ink:#e8eef4;--muted:#93a4b5;
+    --brand:#f4a340;--brand2:#3aa0ff;--good:#37b87c;--mid:#e0a63a;--low:#e5624a;--chip:#26333f;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5}
+  header{padding:18px 16px;background:linear-gradient(135deg,#1a222c,#131a22);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  header h1{margin:0;font-size:19px}header h1 span{color:var(--brand)}
+  .tag{font-size:11px;color:var(--muted);margin-top:2px}
+  main{max-width:960px;margin:0 auto;padding:14px 16px 70px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;color:var(--muted);background:var(--panel2);cursor:pointer}
+  .drop.hl{border-color:var(--brand);color:var(--ink)}
+  button{cursor:pointer;border:1px solid var(--line);border-radius:8px;font-size:14px;font-weight:600;padding:10px 16px;background:var(--chip);color:var(--ink)}
+  button.primary{background:var(--brand);color:#141414;border-color:var(--brand)}
+  button:disabled{opacity:.5;cursor:default}
+  .files{font-size:12.5px;color:var(--muted);margin-top:10px}
+  .spin{display:none;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin-top:12px}
+  .spin.on{display:flex}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--brand);animation:p 1s infinite}
+  @keyframes p{0%,100%{opacity:.3}50%{opacity:1}}
+  .banner{background:#2a2416;border:1px solid #5a4a1f;color:#f0d089;padding:9px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px}
+  .meta{font-size:12.5px;color:var(--muted)}
+  .meta b{color:var(--ink)}
+  .meta ul{margin:6px 0;padding-left:18px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+  th{text-align:left;color:var(--muted);font-weight:500;padding:6px 4px;border-bottom:1px solid var(--line);font-size:11px}
+  td{padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+  input{width:78px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:6px;border-radius:6px;font-size:12.5px;text-align:right}
+  .lt{font-weight:700;color:var(--brand);text-align:right;white-space:nowrap}
+  .badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:20px;font-weight:600}
+  .high{background:rgba(55,184,124,.18);color:var(--good)}
+  .medium{background:rgba(224,166,58,.18);color:var(--mid)}
+  .low{background:rgba(229,98,74,.2);color:var(--low)}
+  .src{font-size:10.5px;color:var(--muted)}
+  .basis{font-size:10.5px;color:var(--muted);max-width:230px}
+  .trade-h td{background:var(--panel2);font-weight:700;color:var(--ink);font-size:12px}
+  .totals{display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .big{font-size:22px;font-weight:800;color:var(--brand)}
+  .rm{background:none;border:none;color:var(--low);cursor:pointer;font-size:15px;padding:0}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .err{color:var(--low);font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>◱ TakeOff</span> — Automatic Material Take-Off</h1>
+  <div class="tag">Upload drawings → AI reads them → you confirm → costed schedule</div>
+</header>
+<main>
+  <div class="card">
+    <div class="drop" id="drop">
+      <div style="font-size:26px">⇪</div>
+      <div>Tap to upload PDF construction drawings</div>
+      <small>Plans, sections, elevations — one or several sheets</small>
+      <input type="file" id="file" accept="application/pdf" multiple hidden>
+    </div>
+    <div class="files" id="fileList"></div>
+    <div class="actions">
+      <button class="primary" id="go" disabled>Read drawings &amp; draft take-off</button>
+    </div>
+    <div class="spin" id="spin"><div class="dot"></div> Reading your drawings — this can take 20–60s per sheet…</div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card" id="result" style="display:none">
+    <div class="banner">⚠️ <b>AI draft — confirm before ordering.</b> These quantities were read from your drawings by AI. Check each line (especially <span class="badge low">low</span> confidence) and adjust quantities or rates as needed.</div>
+    <div class="meta" id="meta"></div>
+    <table id="tbl"><thead><tr>
+      <th>Item</th><th>Basis</th><th>Conf.</th><th>Qty</th><th>Unit</th><th>+%</th><th>£/unit</th><th>Line</th><th></th>
+    </tr></thead><tbody id="tbody"></tbody></table>
+    <div class="totals">
+      <div><div style="font-size:12px;color:var(--muted)">Materials (ex VAT)</div><div id="net" style="font-size:15px;font-weight:600">£0</div></div>
+      <div style="text-align:right"><div style="font-size:12px;color:var(--muted)">Total inc VAT (20%)</div><div class="big" id="gross">£0</div></div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="exportCSV()">⬇ Export CSV</button>
+    </div>
+  </div>
+</main>
+<script>
+let files=[], rows=[], meta={};
+const $=id=>document.getElementById(id);
+const drop=$("drop"),fileInput=$("file");
+drop.onclick=()=>fileInput.click();
+["dragover","dragenter"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add("hl")}));
+["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove("hl")}));
+drop.addEventListener("drop",ev=>{ev.preventDefault();setFiles([...ev.dataTransfer.files])});
+fileInput.onchange=e=>setFiles([...e.target.files]);
+function setFiles(f){files=f.filter(x=>x.type==="application/pdf");
+  $("fileList").textContent=files.length?("Selected: "+files.map(x=>x.name).join(", ")):"";
+  $("go").disabled=!files.length;}
+
+$("go").onclick=async()=>{
+  $("err").textContent="";$("go").disabled=true;$("spin").classList.add("on");
+  try{
+    const fd=new FormData(); files.forEach(f=>fd.append("drawings",f));
+    const r=await fetch("/api/takeoff",{method:"POST",body:fd});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||"Request failed");
+    meta=data.meta||{}; rows=data.lines||[];
+    renderMeta(data); renderRows(); $("result").style.display="block";
+    $("result").scrollIntoView({behavior:"smooth"});
+  }catch(e){ $("err").textContent="Error: "+e.message; }
+  finally{ $("spin").classList.remove("on"); $("go").disabled=false; }
+};
+
+function renderMeta(d){
+  const m=d.meta||{};
+  let h=`<div><b>Sheets read:</b> ${(d.sheets||[]).join(", ")}</div>`;
+  if(m.detectedScale) h+=`<div><b>Detected scale:</b> ${m.detectedScale}</div>`;
+  if(m.buildingType) h+=`<div><b>Building:</b> ${m.buildingType}</div>`;
+  if(m.assumptions&&m.assumptions.length) h+=`<div><b>Assumptions:</b><ul>${m.assumptions.map(a=>`<li>${a}</li>`).join("")}</ul></div>`;
+  if(m.missingInfo&&m.missingInfo.length) h+=`<div><b>Missing / needs checking:</b><ul>${m.missingInfo.map(a=>`<li>${a}</li>`).join("")}</ul></div>`;
+  $("meta").innerHTML=h;
+}
+function renderRows(){
+  const tb=$("tbody"); tb.innerHTML="";
+  const trades=[...new Set(rows.map(r=>r.trade))];
+  trades.forEach(tr=>{
+    const hr=document.createElement("tr"); hr.className="trade-h";
+    hr.innerHTML=`<td colspan="9">${tr}</td>`; tb.appendChild(hr);
+    rows.forEach((r,i)=>{ if(r.trade!==tr) return;
+      const line=r.quantity*(1+r.waste)*r.rate;
+      const tr2=document.createElement("tr");
+      tr2.innerHTML=
+        `<td>${r.name}${r.needsPrice?' <span class="badge low">needs price</span>':''}<div class="src">${r.sourceSheet||''}</div></td>`+
+        `<td class="basis">${r.basis||''}</td>`+
+        `<td><span class="badge ${r.confidence}">${r.confidence}</span></td>`+
+        `<td><input data-i="${i}" data-f="quantity" value="${r.quantity}"></td>`+
+        `<td>${r.unit}</td>`+
+        `<td><input data-i="${i}" data-f="waste" value="${Math.round(r.waste*100)}" style="width:46px"></td>`+
+        `<td><input data-i="${i}" data-f="rate" value="${r.rate.toFixed(2)}"></td>`+
+        `<td class="lt">£${line.toFixed(0)}</td>`+
+        `<td><button class="rm" data-rm="${i}">✕</button></td>`;
+      tb.appendChild(tr2);
+    });
+  });
+  tb.querySelectorAll("input").forEach(inp=>inp.onchange=()=>{
+    const i=+inp.dataset.i,f=inp.dataset.f; let v=parseFloat(inp.value)||0;
+    if(f==="waste") v=v/100; rows[i][f]=v; renderRows();
+  });
+  tb.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{rows.splice(+b.dataset.rm,1);renderRows();});
+  updateTotals();
+}
+function updateTotals(){
+  const net=rows.reduce((s,r)=>s+r.quantity*(1+r.waste)*r.rate,0);
+  $("net").textContent="£"+net.toLocaleString(undefined,{maximumFractionDigits:0});
+  $("gross").textContent="£"+(net*1.2).toLocaleString(undefined,{maximumFractionDigits:0});
+}
+function exportCSV(){
+  let csv="TakeOff — "+(meta.project||"Project")+"\nScale,"+(meta.detectedScale||"")+"\n\n";
+  csv+="Trade,Item,Basis,Confidence,Qty,Unit,Waste %,Rate ex VAT,Line total\n";
+  rows.forEach(r=>{const line=r.quantity*(1+r.waste)*r.rate;
+    csv+=`"${r.trade}","${r.name}","${(r.basis||'').replace(/"/g,"'")}",${r.confidence},${r.quantity},${r.unit},${Math.round(r.waste*100)},${r.rate.toFixed(2)},${line.toFixed(2)}\n`;});
+  const net=rows.reduce((s,r)=>s+r.quantity*(1+r.waste)*r.rate,0);
+  csv+=`\nNet ex VAT,,,,,,,,${net.toFixed(2)}\nVAT 20%,,,,,,,,${(net*0.2).toFixed(2)}\nTotal inc VAT,,,,,,,,${(net*1.2).toFixed(2)}\n`;
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download="takeoff.csv";a.click();
+}
+</script>
+</body>
+</html>
