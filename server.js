@@ -110,7 +110,8 @@ async function extractTakeoff(images) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const content = [{ type: "text", text: buildUserPrompt(images.map((i) => i.name)) }];
   for (const img of images) content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: img.b64 } });
-  const msg = await client.messages.create({ model: MODEL, max_tokens: 8000, system: SYSTEM_PROMPT, messages: [{ role: "user", content }, { role: "assistant", content: "{" }] });   const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+   const msg = await client.messages.create({ model: MODEL, max_tokens: 8000, system: SYSTEM_PROMPT, messages: [{ role: "user", content }, { role: "assistant", content: "{" }] });
+  const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   const parsed = parseModelJson("{" + text);
   return { meta: parsed.meta || {}, lines: Array.isArray(parsed.lines) ? parsed.lines : [] };
 }
