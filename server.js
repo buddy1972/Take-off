@@ -110,9 +110,15 @@ async function extractTakeoff(images) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const content = [{ type: "text", text: buildUserPrompt(images.map((i) => i.name)) }];
   for (const img of images) content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: img.b64 } });
-   const msg = await client.messages.create({ model: MODEL, max_tokens: 8000, system: SYSTEM_PROMPT, messages: [{ role: "user", content }, { role: "assistant", content: "{" }] });
-  const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
-  const parsed = parseModelJson("{" + text);
+ const msg = await client.messages.create({
+    model: MODEL, max_tokens: 8000, system: SYSTEM_PROMPT,
+    tools: [{ name: "submit_takeoff", description: "Return the material take-off as structured data.",
+      input_schema: { type: "object", properties: { meta: { type: "object" }, lines: { type: "array", items: { type: "object" } } }, required: ["lines"] } }],
+    tool_choice: { type: "tool", name: "submit_takeoff" },
+    messages: [{ role: "user", content }],
+  });
+  const tu = msg.content.find((b) => b.type === "tool_use");
+  const parsed = tu ? tu.input : {};
   return { meta: parsed.meta || {}, lines: Array.isArray(parsed.lines) ? parsed.lines : [] };
 }
 async function runTakeoff(files) {
