@@ -39,6 +39,74 @@ const LIBRARY = [
   { key:"grout", trade:"Bathroom / tiling", name:"Grout (5kg)", unit:"tub", rate:11.0, waste:0, calcHint:"tiled area m² ÷ ~10" },
   { key:"backer", trade:"Bathroom / tiling", name:"Tile backer board 12mm", unit:"board", rate:11.0, waste:0.05, calcHint:"wet wall area m² ÷ 0.72" },
   { key:"silicone", trade:"Bathroom / tiling", name:"Silicone sealant", unit:"tube", rate:6.0, waste:0, calcHint:"perimeter lm ÷ ~8" },
+  { key:"drain_110", trade:"Drainage", name:"Underground drainage pipe 110mm (per lm)", unit:"lm", rate:5.0, waste:0.05, calcHint:"length of 110mm drain run in linear m" },
+  { key:"drain_150", trade:"Drainage", name:"Underground drainage pipe 150mm (per lm)", unit:"lm", rate:8.0, waste:0.05, calcHint:"length of 150mm drain run in linear m" },
+  { key:"bend_110", trade:"Drainage", name:"Drainage bend 110mm", unit:"each", rate:3.5, waste:0.05, calcHint:"1 per bend on the 110mm runs" },
+  { key:"bend_150", trade:"Drainage", name:"Drainage bend 150mm", unit:"each", rate:8.0, waste:0.05, calcHint:"1 per bend on the 150mm runs" },
+  { key:"junction_110", trade:"Drainage", name:"Drainage junction / branch 110mm", unit:"each", rate:5.0, waste:0.05, calcHint:"1 per junction on the 110mm runs" },
+  { key:"junction_150", trade:"Drainage", name:"Drainage junction / branch 150mm", unit:"each", rate:12.0, waste:0.05, calcHint:"1 per junction on the 150mm runs" },
+  { key:"coupler_110", trade:"Drainage", name:"Drainage coupler / slip union 110mm", unit:"each", rate:2.5, waste:0.05, calcHint:"joints/unions on 110mm runs" },
+  { key:"coupler_150", trade:"Drainage", name:"Drainage coupler / slip union 150mm", unit:"each", rate:6.0, waste:0.05, calcHint:"joints/unions on 150mm runs" },
+  { key:"manhole_110", trade:"Drainage", name:"Inspection chamber / manhole (110mm system)", unit:"each", rate:90.0, waste:0, calcHint:"1 per IC/manhole on the 110mm system" },
+  { key:"manhole_150", trade:"Drainage", name:"Inspection chamber / manhole (150mm system)", unit:"each", rate:130.0, waste:0, calcHint:"1 per IC/manhole on the 150mm system" },
+  { key:"manhole_cover", trade:"Drainage", name:"Manhole cover & frame", unit:"each", rate:45.0, waste:0, calcHint:"1 per manhole / IC" },
+  { key:"pump_chamber", trade:"Drainage", name:"Foul water pump chamber (packaged)", unit:"each", rate:2000.0, waste:0, calcHint:"1 per pump chamber shown — specialist supply" },
+  { key:"drain_bedding", trade:"Drainage", name:"Pea shingle bedding & surround to drains", unit:"tonne", rate:38.0, waste:0.05, calcHint:"~0.3 tonne per lm of drain trench" },
+  { key:"beam_block_floor", trade:"Substructure", name:"Beam & block floor system (e.g. Future Foundations)", unit:"m²", rate:45.0, waste:0, calcHint:"ground/first floor area m² — specialist supply" },
+  { key:"upvc_window", trade:"Windows & doors", name:"uPVC window (supply)", unit:"each", rate:350.0, waste:0, calcHint:"1 per window on the schedule / elevations" },
+  { key:"upvc_door", trade:"Windows & doors", name:"uPVC / composite external door (supply)", unit:"each", rate:550.0, waste:0, calcHint:"1 per external door" },
+  { key:"hardcore", trade:"Substructure", name:"Hardcore / Type 1 MOT sub-base", unit:"tonne", rate:35.0, waste:0.05, calcHint:"~2 tonne per m³ of sub-base" },
+  { key:"sand_blinding", trade:"Substructure", name:"Sand blinding to sub-base", unit:"tonne", rate:32.0, waste:0.05, calcHint:"thin layer over hardcore" },
+  { key:"mesh_a142", trade:"Substructure", name:"Reinforcement mesh A142 (sheet)", unit:"sheet", rate:22.0, waste:0.10, calcHint:"floor slab, ~1 sheet per 8 m² incl laps" },
+  { key:"radon_membrane", trade:"Substructure", name:"Radon / gas membrane", unit:"m²", rate:3.5, waste:0.10, calcHint:"ground floor area + laps" },
+  { key:"floor_pir", trade:"Substructure", name:"Floor insulation PIR 100mm", unit:"m²", rate:22.0, waste:0.05, calcHint:"ground floor area" },
+  { key:"air_brick", trade:"Substructure", name:"Air brick / telescopic underfloor vent", unit:"each", rate:8.0, waste:0.05, calcHint:"~1 per 2m of external wall (beam & block)" },
+  { key:"lintel_steel", trade:"External envelope", name:"Steel lintel (cavity, per lm)", unit:"lm", rate:45.0, waste:0.05, calcHint:"opening width + 300mm bearing each end" },
+  { key:"lintel_conc", trade:"External envelope", name:"Concrete lintel (per lm)", unit:"lm", rate:12.0, waste:0.05, calcHint:"internal / blockwork openings" },
+  { key:"cavity_closer", trade:"External envelope", name:"Cavity closer (per lm)", unit:"lm", rate:4.0, waste:0.05, calcHint:"around window/door reveals" },
+  { key:"cavity_tray", trade:"External envelope", name:"Cavity tray (per lm)", unit:"lm", rate:9.0, waste:0.05, calcHint:"over openings / at abutments" },
+  { key:"weep_vent", trade:"External envelope", name:"Weep vents", unit:"each", rate:0.5, waste:0.05, calcHint:"~1 per 450mm over cavity trays" },
+  { key:"stone_head", trade:"External envelope", name:"Stone head (reconstituted)", unit:"each", rate:45.0, waste:0, calcHint:"1 per window/door head" },
+  { key:"stone_cill", trade:"External envelope", name:"Stone cill (reconstituted)", unit:"each", rate:40.0, waste:0, calcHint:"1 per window" },
+  { key:"bed_reinf", trade:"External envelope", name:"Bed-joint reinforcement (per lm)", unit:"lm", rate:1.5, waste:0.05, calcHint:"as specified" },
+  { key:"ff_joists", trade:"Superstructure", name:"First-floor joists (per m²)", unit:"m²", rate:30.0, waste:0, calcHint:"first floor area — engineered/solid joists" },
+  { key:"wall_plate", trade:"Superstructure", name:"Wall plate (treated, per lm)", unit:"lm", rate:3.5, waste:0.10, calcHint:"perimeter at eaves" },
+  { key:"straps", trade:"Superstructure", name:"Restraint / holding-down straps", unit:"each", rate:2.5, waste:0.05, calcHint:"~1 per 2m at gables/eaves" },
+  { key:"joist_hanger", trade:"Superstructure", name:"Joist hanger", unit:"each", rate:2.0, waste:0.05, calcHint:"1 per joist end" },
+  { key:"roof_structure", trade:"Roof", name:"Roof trusses / cut timber (per m²)", unit:"m²", rate:35.0, waste:0, calcHint:"roof plan area — specialist design" },
+  { key:"ridge_tile", trade:"Roof", name:"Ridge tiles (per lm)", unit:"lm", rate:12.0, waste:0.05, calcHint:"ridge length" },
+  { key:"hip_tile", trade:"Roof", name:"Hip tiles (per lm)", unit:"lm", rate:13.0, waste:0.05, calcHint:"hip length" },
+  { key:"dry_ridge", trade:"Roof", name:"Dry ridge / verge kit (per lm)", unit:"lm", rate:14.0, waste:0.05, calcHint:"ridge + verge length" },
+  { key:"valley", trade:"Roof", name:"Valley (per lm)", unit:"lm", rate:18.0, waste:0.05, calcHint:"valley length" },
+  { key:"lead_flash", trade:"Roof", name:"Lead flashing (per lm)", unit:"lm", rate:25.0, waste:0.05, calcHint:"abutments, chimneys" },
+  { key:"fascia", trade:"Roof", name:"Fascia board (per lm)", unit:"lm", rate:9.0, waste:0.05, calcHint:"eaves + verge length" },
+  { key:"soffit", trade:"Roof", name:"Soffit board (per lm)", unit:"lm", rate:8.0, waste:0.05, calcHint:"eaves length" },
+  { key:"bargeboard", trade:"Roof", name:"Bargeboard (per lm)", unit:"lm", rate:11.0, waste:0.05, calcHint:"verge / gable length" },
+  { key:"gutter", trade:"Roof", name:"Guttering (per lm)", unit:"lm", rate:6.0, waste:0.05, calcHint:"eaves length" },
+  { key:"downpipe", trade:"Roof", name:"Downpipe (per lm)", unit:"lm", rate:7.0, waste:0.05, calcHint:"downpipe runs" },
+  { key:"loft_insul", trade:"Insulation", name:"Loft / roof insulation (per m²)", unit:"m²", rate:7.0, waste:0.05, calcHint:"roof/ceiling area at spec depth" },
+  { key:"acoustic_insul", trade:"Insulation", name:"Acoustic insulation to walls/floors (per m²)", unit:"m²", rate:6.0, waste:0.05, calcHint:"internal walls/floors as specified" },
+  { key:"screed", trade:"Internal & finishes", name:"Floor screed (per m²)", unit:"m²", rate:16.0, waste:0.05, calcHint:"floor area, ~65mm" },
+  { key:"skirting", trade:"Internal & finishes", name:"Skirting (per lm)", unit:"lm", rate:3.5, waste:0.10, calcHint:"room perimeters" },
+  { key:"architrave", trade:"Internal & finishes", name:"Architrave (per lm)", unit:"lm", rate:2.8, waste:0.10, calcHint:"~5 lm per door" },
+  { key:"int_door", trade:"Internal & finishes", name:"Internal door + lining + ironmongery", unit:"each", rate:110.0, waste:0, calcHint:"1 per doorway" },
+  { key:"staircase", trade:"Internal & finishes", name:"Staircase (timber)", unit:"each", rate:2200.0, waste:0, calcHint:"1 per stair flight — specialist" },
+  { key:"angle_bead", trade:"Internal & finishes", name:"Plaster angle bead (per lm)", unit:"lm", rate:1.2, waste:0.05, calcHint:"external corners" },
+  { key:"scrim", trade:"Internal & finishes", name:"Scrim tape (90m roll)", unit:"roll", rate:3.0, waste:0, calcHint:"board joints" },
+  { key:"jointing", trade:"Internal & finishes", name:"Jointing compound (tub)", unit:"tub", rate:13.0, waste:0, calcHint:"board joints / prep" },
+  { key:"loft_hatch", trade:"Internal & finishes", name:"Loft hatch", unit:"each", rate:35.0, waste:0, calcHint:"1 per loft access" },
+  { key:"wc", trade:"Sanitaryware", name:"WC (close-coupled)", unit:"each", rate:120.0, waste:0, calcHint:"1 per WC" },
+  { key:"basin", trade:"Sanitaryware", name:"Wash basin & pedestal/vanity", unit:"each", rate:90.0, waste:0, calcHint:"1 per basin" },
+  { key:"bath", trade:"Sanitaryware", name:"Bath (acrylic)", unit:"each", rate:180.0, waste:0, calcHint:"1 per bathroom" },
+  { key:"shower_enc", trade:"Sanitaryware", name:"Shower tray & enclosure", unit:"each", rate:250.0, waste:0, calcHint:"1 per shower" },
+  { key:"shower_valve", trade:"Sanitaryware", name:"Shower valve / mixer", unit:"each", rate:120.0, waste:0, calcHint:"1 per shower" },
+  { key:"taps", trade:"Sanitaryware", name:"Taps (basin/bath set)", unit:"set", rate:70.0, waste:0, calcHint:"1 set per basin/bath" },
+  { key:"svp", trade:"Above-ground drainage", name:"Soil & vent pipe 110mm (per lm)", unit:"lm", rate:8.0, waste:0.05, calcHint:"vertical soil stacks + vent" },
+  { key:"waste_pipe", trade:"Above-ground drainage", name:"Waste pipe 32/40mm (per lm)", unit:"lm", rate:2.5, waste:0.05, calcHint:"basin/bath/sink wastes" },
+  { key:"kitchen", trade:"Kitchen", name:"Kitchen units & worktops (provisional)", unit:"item", rate:6000.0, waste:0, calcHint:"provisional sum — client choice" },
+  { key:"fixings", trade:"Fixings & sundries", name:"Fixings & fasteners allowance", unit:"item", rate:250.0, waste:0, calcHint:"general build allowance" },
+  { key:"foam", trade:"Fixings & sundries", name:"Expanding foam (can)", unit:"can", rate:6.0, waste:0, calcHint:"gap filling" },
+  { key:"plasticiser", trade:"Fixings & sundries", name:"Mortar plasticiser (5L)", unit:"tub", rate:7.0, waste:0, calcHint:"mortar additive" },
 ];
 const BY_KEY = Object.fromEntries(LIBRARY.map((m) => [m.key, m]));
 
@@ -89,7 +157,7 @@ function parseModelJson(text) {
   const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) t = fence[1].trim();
   const s = t.indexOf("{"), e = t.lastIndexOf("}");
-  if (s === -1 || e === -1) throw new Error("No JSON object found in model reply");
+  if (s === -1 || e === -1) throw new Error("The AI couldn't produce a readable take-off this time — please try again (or try fewer / clearer sheets).");
   return JSON.parse(t.slice(s, e + 1));
 }
 
@@ -110,7 +178,8 @@ async function extractTakeoff(images) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const content = [{ type: "text", text: buildUserPrompt(images.map((i) => i.name)) }];
   for (const img of images) content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: img.b64 } });
- const msg = await client.messages.create({
+  // Force structured output via a tool call — reliable, and supported by current models.
+  const msg = await client.messages.create({
     model: MODEL, max_tokens: 8000, system: SYSTEM_PROMPT,
     tools: [{ name: "submit_takeoff", description: "Return the material take-off as structured data.",
       input_schema: { type: "object", properties: { meta: { type: "object" }, lines: { type: "array", items: { type: "object" } } }, required: ["lines"] } }],
