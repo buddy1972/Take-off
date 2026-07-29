@@ -109,10 +109,12 @@ const LIBRARY = [
   { key:"plasticiser", trade:"Fixings & sundries", name:"Mortar plasticiser (5L)", unit:"tub", rate:7.0, waste:0, calcHint:"mortar additive" },
 ];
 const BY_KEY = Object.fromEntries(LIBRARY.map((m) => [m.key, m]));
+const LIB_KEYS = LIBRARY.map((m) => m.key);
+const BY_NAME = Object.fromEntries(LIBRARY.map((m) => [m.name.toLowerCase().trim(), m]));
 
 function costLines(lines) {
   return lines.map((l) => {
-    const lib = BY_KEY[l.libraryKey];
+    const lib = BY_KEY[l.libraryKey] || BY_NAME[(l.name || "").toLowerCase().trim()];
     const rate = lib ? lib.rate : (typeof l.unitRate === "number" ? l.unitRate : 0);
     const waste = lib ? lib.waste : (l.waste ?? 0);
     const qty = Number(l.quantity) || 0;
@@ -146,7 +148,7 @@ ${libraryTable}
 
 If something needed is NOT in the library, include it with "libraryKey":"OTHER", a clear "name", best "quantity"/"unit", and if possible a "unitRate" in GBP ex-VAT.
 
-RULES: quantities are numbers only; give "basis" (how derived, citing the sheet); "confidence" is high/medium/low; note assumptions and anything needing floor plans in meta.missingInfo; specialist packages (timber frame kit, beam & block, trusses, windows) can be OTHER lines at low confidence.
+RULES: quantities are numbers only; give a SHORT "basis" (a few words + sheet ref, not a paragraph); "confidence" is high/medium/low; note assumptions and anything needing floor plans in meta.missingInfo; specialist packages (timber frame kit, beam & block, trusses, windows) can be OTHER lines at low confidence.
 
 Return STRICT JSON ONLY, no prose, no code fences:
 {"meta":{"project":"","detectedScale":"","buildingType":"","assumptions":[],"missingInfo":[]},
@@ -180,15 +182,25 @@ async function extractTakeoff(images) {
   for (const img of images) content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: img.b64 } });
   // Force structured output via a tool call — reliable, and supported by current models.
   const msg = await client.messages.create({
-    model: MODEL, max_tokens: 8000, system: SYSTEM_PROMPT,
-    tools: [{ name: "submit_takeoff", description: "Return the material take-off as structured data.",
-      input_schema: { type: "object", properties: { meta: { type: "object" }, lines: { type: "array", items: { type: "object" } } }, required: ["lines"] } }],
+    model: MODEL, max_tokens: 16000, system: SYSTEM_PROMPT,
+    tools: [{ name: "submit_takeoff", description: "Return the material take-off as structured data. For every line, libraryKey MUST be one of the allowed price-list codes (or 'OTHER' only if nothing fits).",
+      input_schema: { type: "object", properties: {
+        meta: { type: "object", properties: { project:{type:"string"}, detectedScale:{type:"string"}, buildingType:{type:"string"}, assumptions:{type:"array",items:{type:"string"}}, missingInfo:{type:"array",items:{type:"string"}} } },
+        lines: { type: "array", items: { type: "object", properties: {
+          libraryKey: { type: "string", enum: LIB_KEYS.concat("OTHER") },
+          name: { type: "string" }, quantity: { type: "number" }, unit: { type: "string" },
+          basis: { type: "string" }, confidence: { type: "string", enum: ["high","medium","low"] },
+          sourceSheet: { type: "string" }, unitRate: { type: "number" }
+        }, required: ["libraryKey","name","quantity"] } }
+      }, required: ["lines"] } }],
     tool_choice: { type: "tool", name: "submit_takeoff" },
     messages: [{ role: "user", content }],
   });
   const tu = msg.content.find((b) => b.type === "tool_use");
   const parsed = tu ? tu.input : {};
-  return { meta: parsed.meta || {}, lines: Array.isArray(parsed.lines) ? parsed.lines : [] };
+  const lines = Array.isArray(parsed.lines) ? parsed.lines : [];
+  console.log(`[takeoff] stop=${msg.stop_reason} out_tokens=${msg.usage && msg.usage.output_tokens} lines=${lines.length}`);
+  return { meta: parsed.meta || {}, lines };
 }
 async function runTakeoff(files) {
   const images = await pdfBuffersToImages(files);
