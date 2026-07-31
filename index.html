@@ -164,7 +164,7 @@
     <div class="meta" id="meta"></div>
     <div style="overflow-x:auto">
       <table id="tbl"><thead><tr>
-        <th>Item</th><th>Basis</th><th>Conf.</th><th>Qty</th><th>Unit</th><th>+%</th><th>£/unit</th><th>Supplier</th><th>Line</th><th></th>
+        <th>Item</th><th>Basis</th><th>Conf.</th><th>Qty</th><th>Unit</th><th>+%</th><th>£/unit</th><th>Supplier</th><th>Priced from</th><th>Line</th><th></th>
       </tr></thead><tbody id="tbody"></tbody></table>
     </div>
 
@@ -226,7 +226,7 @@ $("go").onclick=async()=>{
     const r=await fetch("/api/takeoff",{method:"POST",body:fd});
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||"Request failed");
-    meta=data.meta||{}; rows=(data.lines||[]).map(l=>({...l,supplier:l.supplier||""}));
+    meta=data.meta||{}; rows=(data.lines||[]).map(l=>({...l,supplier:l.supplier||"",source:l.source||""}));
     if(meta.project && !$("pName").value) $("pName").value=meta.project;
     renderMeta(data); renderRows(); $("result").style.display="block";
     $("result").scrollIntoView({behavior:"smooth"});
@@ -247,10 +247,10 @@ function renderMeta(d){
 }
 function renderRows(){
   const tb=$("tbody"); tb.innerHTML="";
-  if(!rows.length){tb.innerHTML='<tr><td colspan="10" class="empty">No lines yet.</td></tr>';updateTotals();return;}
+  if(!rows.length){tb.innerHTML='<tr><td colspan="11" class="empty">No lines yet.</td></tr>';updateTotals();return;}
   const trades=[...new Set(rows.map(r=>r.trade))];
   trades.forEach(tr=>{
-    const hr=document.createElement("tr");hr.className="trade-h";hr.innerHTML=`<td colspan="10">${esc(tr)}</td>`;tb.appendChild(hr);
+    const hr=document.createElement("tr");hr.className="trade-h";hr.innerHTML=`<td colspan="11">${esc(tr)}</td>`;tb.appendChild(hr);
     rows.forEach((r,i)=>{ if(r.trade!==tr) return;
       const line=r.quantity*(1+r.waste)*r.rate;
       const t=document.createElement("tr");
@@ -263,6 +263,7 @@ function renderRows(){
         `<td><input class="to-input w" data-i="${i}" data-f="waste" value="${Math.round(r.waste*100)}"></td>`+
         `<td><input class="to-input" data-i="${i}" data-f="rate" value="${r.rate>0?r.rate.toFixed(2):''}" placeholder="—"></td>`+
         `<td><input class="to-input txt" style="width:110px" data-i="${i}" data-f="supplier" value="${esc(r.supplier||'')}" placeholder="—"></td>`+
+        `<td><input class="to-input txt" style="width:140px" data-i="${i}" data-f="source" value="${esc(r.source||'')}" placeholder="merchant / link"></td>`+
         `<td class="lt">${r.rate>0?gbp(line):'<span style="color:var(--faint);font-weight:400">— to price</span>'}</td>`+
         `<td><button class="rm" data-rm="${i}">✕</button></td>`;
       tb.appendChild(t);
@@ -270,7 +271,7 @@ function renderRows(){
   });
   tb.querySelectorAll("input").forEach(inp=>inp.onchange=()=>{
     const i=+inp.dataset.i,f=inp.dataset.f;
-    if(f==="supplier"){rows[i].supplier=inp.value;return;}
+    if(f==="supplier"||f==="source"){rows[i][f]=inp.value;return;}
     let v=parseFloat(inp.value)||0; if(f==="waste")v=v/100; rows[i][f]=v; renderRows();
   });
   tb.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{rows.splice(+b.dataset.rm,1);renderRows();});
@@ -319,9 +320,9 @@ $("margin").oninput=updateTotals;
 function exportCSV(){
   const c=calc();
   let csv="Hengari Take-Off,"+q($("pName").value||"Project")+"\nClient,"+q($("pClient").value)+"\nRef,"+q($("pRef").value)+"\nDate,"+q($("pDate").value)+"\n\n";
-  csv+="Trade,Item,Basis,Confidence,Qty,Unit,Waste %,Rate ex VAT,Supplier,Line total\n";
+  csv+="Trade,Item,Basis,Confidence,Qty,Unit,Waste %,Rate ex VAT,Supplier,Priced from,Line total\n";
   rows.forEach(r=>{const line=r.quantity*(1+r.waste)*r.rate;
-    csv+=[q(r.trade),q(r.name),q(r.basis),r.confidence,r.quantity,r.unit,Math.round(r.waste*100),r.rate>0?r.rate.toFixed(2):"",q(r.supplier),r.rate>0?line.toFixed(2):""].join(",")+"\n";});
+    csv+=[q(r.trade),q(r.name),q(r.basis),r.confidence,r.quantity,r.unit,Math.round(r.waste*100),r.rate>0?r.rate.toFixed(2):"",q(r.supplier),q(r.source),r.rate>0?line.toFixed(2):""].join(",")+"\n";});
   csv+="\nLabour,Company / trade,,,,,,,Cost\n";
   labourLines.forEach(l=>{csv+=[",",q(l.company),"","","","","","",(parseFloat(l.cost)||0).toFixed(2)].join(",")+"\n";});
   csv+=`\nMaterials ex VAT,,,,,,,,,${c.mat.toFixed(2)}\nLabour ex VAT,,,,,,,,,${c.lab.toFixed(2)}\nMargin ${Math.round(c.marg*100)}%,,,,,,,,,${(c.net-c.base).toFixed(2)}\nVAT 20%,,,,,,,,,${c.vat.toFixed(2)}\nQuote total inc VAT,,,,,,,,,${c.grand.toFixed(2)}\n`;
@@ -381,31 +382,68 @@ function savePDF(){
   window.print();
 }
 
-/* ---------- SAVE / LOAD (local to this device) ---------- */
+/* ---------- SAVE / LOAD ----------
+   Uses shared CLOUD save when the server has a database configured; otherwise
+   falls back to saving in THIS browser (per-device), so the app always works. */
 const KEY="hengari_takeoffs";
+let CLOUD=false;                 // set true at startup if the server has a database
 function store(){try{return JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){return {}}}
-function refreshSaved(){
-  const s=store();const sel=$("savedSel");sel.innerHTML='<option value="">— reload a saved take-off —</option>';
-  Object.keys(s).sort().forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;sel.appendChild(o);});
+function setNames(names){
+  const sel=$("savedSel");sel.innerHTML='<option value="">— reload a saved take-off —</option>';
+  names.slice().sort().forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;sel.appendChild(o);});
 }
-function saveProject(){
-  const name=($("pName").value||"").trim(); if(!name){toast("Add a project name first");return;}
-  if(!rows.length){toast("Nothing to save yet");return;}
-  try{const s=store();s[name]={pName:name,pClient:$("pClient").value,pRef:$("pRef").value,pDate:$("pDate").value,
-    margin:$("margin").value,rows,labourLines,meta};
-    localStorage.setItem(KEY,JSON.stringify(s));refreshSaved();$("savedSel").value=name;toast("Saved “"+name+"” on this device");
-  }catch(e){toast("Couldn't save on this browser")}
+function currentPayload(name){
+  return {pName:name,pClient:$("pClient").value,pRef:$("pRef").value,pDate:$("pDate").value,
+          margin:$("margin").value,rows,labourLines,meta};
 }
-$("savedSel").onchange=function(){
-  const s=store()[this.value]; if(!s)return;
+function applyPayload(s){
   $("pName").value=s.pName||"";$("pClient").value=s.pClient||"";$("pRef").value=s.pRef||"";$("pDate").value=s.pDate||"";
   $("margin").value=s.margin||"0";
-  rows=(s.rows||[]).map(r=>({...r,supplier:r.supplier||""}));labourLines=s.labourLines||[];meta=s.meta||{};
+  rows=(s.rows||[]).map(r=>({...r,supplier:r.supplier||"",source:r.source||""}));labourLines=s.labourLines||[];meta=s.meta||{};
   renderMeta({meta,sheets:[]});renderRows();renderLabour();$("result").style.display="block";
-  toast("Loaded “"+this.value+"”");
+}
+async function refreshSaved(){
+  try{
+    const r=await fetch("/api/takeoffs");
+    if(r.ok){const j=await r.json(); if(j.cloud){CLOUD=true; setNames(j.names||[]); return;}}
+  }catch(e){}
+  CLOUD=false; setNames(Object.keys(store()));   // fallback: this device only
+}
+async function saveProject(){
+  const name=($("pName").value||"").trim(); if(!name){toast("Add a project name first");return;}
+  if(!rows.length){toast("Nothing to save yet");return;}
+  if(CLOUD){
+    try{
+      const r=await fetch("/api/takeoffs",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({name,payload:currentPayload(name)})});
+      if(!r.ok)throw 0;
+      await refreshSaved();$("savedSel").value=name;toast("Saved “"+name+"” to the cloud");
+    }catch(e){toast("Couldn't save to the cloud — check connection")}
+    return;
+  }
+  try{const s=store();s[name]=currentPayload(name);
+    localStorage.setItem(KEY,JSON.stringify(s));await refreshSaved();$("savedSel").value=name;toast("Saved “"+name+"” on this device");
+  }catch(e){toast("Couldn't save on this browser")}
+}
+$("savedSel").onchange=async function(){
+  const n=this.value; if(!n)return;
+  if(CLOUD){
+    try{const r=await fetch("/api/takeoffs/"+encodeURIComponent(n)); if(!r.ok)throw 0;
+      applyPayload(await r.json());toast("Loaded “"+n+"”");
+    }catch(e){toast("Couldn't load that take-off")}
+    return;
+  }
+  const s=store()[n]; if(!s)return; applyPayload(s); toast("Loaded “"+n+"”");
 };
-function deleteSaved(){const n=$("savedSel").value;if(!n){toast("Pick a saved take-off to delete");return;}
-  try{const s=store();delete s[n];localStorage.setItem(KEY,JSON.stringify(s));refreshSaved();toast("Deleted “"+n+"”")}catch(e){}}
+async function deleteSaved(){
+  const n=$("savedSel").value;if(!n){toast("Pick a saved take-off to delete");return;}
+  if(CLOUD){
+    try{const r=await fetch("/api/takeoffs/"+encodeURIComponent(n),{method:"DELETE"}); if(!r.ok)throw 0;
+      await refreshSaved();toast("Deleted “"+n+"”");
+    }catch(e){toast("Couldn't delete that take-off")}
+    return;
+  }
+  try{const s=store();delete s[n];localStorage.setItem(KEY,JSON.stringify(s));await refreshSaved();toast("Deleted “"+n+"”")}catch(e){}}
 
 /* ---------- INIT ---------- */
 try{$("pDate").valueAsDate=new Date();}catch(e){}

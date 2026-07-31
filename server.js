@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import Anthropic from "@anthropic-ai/sdk";
 import { pdf } from "pdf-to-img";
 import sharp from "sharp";
+import pg from "pg";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
@@ -33,10 +34,11 @@ const LIBRARY = [
   { key:"skim", trade:"Internal & finishes", name:"Multi-finish plaster (25kg)", unit:"bag", rate:10.0, waste:0, calcHint:"boarded area m² ÷ ~10" },
   { key:"cls_stud", trade:"Internal & finishes", name:"CLS studwork 89x38 (per lm)", unit:"lm", rate:1.10, waste:0.05, calcHint:"partition wall area m² × ~4.5 lm" },
   { key:"floor_deck", trade:"Internal & finishes", name:"Chipboard flooring 22mm T&G", unit:"board", rate:22.0, waste:0.05, calcHint:"floor area m² ÷ 1.44" },
-  { key:"wall_tile", trade:"Bathroom / tiling", name:"Ceramic wall tiles", unit:"m²", rate:25.0, waste:0.10, calcHint:"tiled wall area m²" },
-  { key:"floor_tile", trade:"Bathroom / tiling", name:"Porcelain floor tiles", unit:"m²", rate:45.0, waste:0.10, calcHint:"tiled floor area m²" },
+  { key:"wall_tile", trade:"Bathroom / tiling", name:"Wall tiles — porcelain (advice price)", unit:"m²", rate:22.0, waste:0.10, calcHint:"tiled wall area m²; advice/guide ~£8–27/m² by range (Junction 8)" },
+  { key:"floor_tile", trade:"Bathroom / tiling", name:"Floor tiles — porcelain (advice price)", unit:"m²", rate:24.0, waste:0.10, calcHint:"tiled floor area m²; advice/guide ~£12–26/m² by range (Junction 8)" },
+  { key:"tile_trim", trade:"Bathroom / tiling", name:"Tile trim — straight edge (2.4m length)", unit:"length", rate:8.33, waste:0.05, calcHint:"trim to exposed tile edges (Junction 8)" },
   { key:"tile_adh", trade:"Bathroom / tiling", name:"Tile adhesive (20kg)", unit:"bag", rate:16.0, waste:0, calcHint:"tiled area m² ÷ ~5" },
-  { key:"grout", trade:"Bathroom / tiling", name:"Grout (5kg)", unit:"tub", rate:11.0, waste:0, calcHint:"tiled area m² ÷ ~10" },
+  { key:"grout", trade:"Bathroom / tiling", name:"Grout — Kerakoll Fugabella (3kg)", unit:"bag", rate:10.42, waste:0, calcHint:"tiled area m² ÷ ~10 (Junction 8)" },
   { key:"backer", trade:"Bathroom / tiling", name:"Tile backer board 12mm", unit:"board", rate:11.0, waste:0.05, calcHint:"wet wall area m² ÷ 0.72" },
   { key:"silicone", trade:"Bathroom / tiling", name:"Silicone sealant", unit:"tube", rate:6.0, waste:0, calcHint:"perimeter lm ÷ ~8" },
   { key:"drain_110", trade:"Drainage", name:"Underground drainage pipe 110mm (per lm)", unit:"lm", rate:5.0, waste:0.05, calcHint:"length of 110mm drain run in linear m" },
@@ -47,6 +49,7 @@ const LIBRARY = [
   { key:"junction_150", trade:"Drainage", name:"Drainage junction / branch 150mm", unit:"each", rate:12.0, waste:0.05, calcHint:"1 per junction on the 150mm runs" },
   { key:"coupler_110", trade:"Drainage", name:"Drainage coupler / slip union 110mm", unit:"each", rate:2.5, waste:0.05, calcHint:"joints/unions on 110mm runs" },
   { key:"coupler_150", trade:"Drainage", name:"Drainage coupler / slip union 150mm", unit:"each", rate:6.0, waste:0.05, calcHint:"joints/unions on 150mm runs" },
+  { key:"aco_channel", trade:"Drainage", name:"ACO channel drain + grating (per lm)", unit:"lm", rate:28.0, waste:0.05, calcHint:"linear m of channel run incl. grating; advice/guide price" },
   { key:"manhole_110", trade:"Drainage", name:"Inspection chamber / manhole (110mm system)", unit:"each", rate:90.0, waste:0, calcHint:"1 per IC/manhole on the 110mm system" },
   { key:"manhole_150", trade:"Drainage", name:"Inspection chamber / manhole (150mm system)", unit:"each", rate:130.0, waste:0, calcHint:"1 per IC/manhole on the 150mm system" },
   { key:"manhole_cover", trade:"Drainage", name:"Manhole cover & frame", unit:"each", rate:45.0, waste:0, calcHint:"1 per manhole / IC" },
@@ -84,9 +87,40 @@ const LIBRARY = [
   { key:"bargeboard", trade:"Roof", name:"Bargeboard (per lm)", unit:"lm", rate:11.0, waste:0.05, calcHint:"verge / gable length" },
   { key:"gutter", trade:"Roof", name:"Guttering (per lm)", unit:"lm", rate:6.0, waste:0.05, calcHint:"eaves length" },
   { key:"downpipe", trade:"Roof", name:"Downpipe (per lm)", unit:"lm", rate:7.0, waste:0.05, calcHint:"downpipe runs" },
+  { key:"sig_siga13s", trade:"Roofing (SIG)", name:"SIGA 13S natural slate 500×250, holed (SIG)", unit:"slate", rate:1.75, waste:0.05, calcHint:"~20 slates per m² (500×250); SIG net £1,750/1000" },
+  { key:"sig_siga13s_half", trade:"Roofing (SIG)", name:"SIGA 13S slate-and-half 500×370 (SIG)", unit:"each", rate:5.25, waste:0.05, calcHint:"verges/features; SIG net £5,250/1000" },
+  { key:"sig_rivius_tile", trade:"Roofing (SIG)", name:"Sandtoft Rivius clay tile, Antique Slate (SIG)", unit:"tile", rate:2.06, waste:0.05, calcHint:"~10 tiles per m²; SIG net £2,059/1000" },
+  { key:"sig_marley_ridge", trade:"Roofing (SIG)", name:"Marley cap-angle ridge 450mm, slate black (SIG)", unit:"each", rate:10.75, waste:0.05, calcHint:"ridge/hip length ÷ 0.3; SIG" },
+  { key:"sig_duracoat_ridge", trade:"Roofing (SIG)", name:"Sandtoft Duracoat multi-angle ridge (SIG)", unit:"each", rate:3.95, waste:0.05, calcHint:"dry ridge unit; SIG" },
+  { key:"sig_duracoat_ridge_be", trade:"Roofing (SIG)", name:"Sandtoft Duracoat ridge w/ block end (SIG)", unit:"each", rate:19.23, waste:0.05, calcHint:"ridge ends; SIG" },
+  { key:"sig_duracoat_hip_start", trade:"Roofing (SIG)", name:"Sandtoft Duracoat hip starter ridge (SIG)", unit:"each", rate:19.24, waste:0.05, calcHint:"one per hip base; SIG" },
+  { key:"sig_pvrk_ridgekit", trade:"Roofing (SIG)", name:"Permavent PVRK dry ridge kit 6m (SIG)", unit:"each", rate:27.0, waste:0.05, calcHint:"ridge length ÷ 6; SIG" },
+  { key:"sig_hip_iron", trade:"Roofing (SIG)", name:"SITEFIX hip iron 4×150×300 galv (SIG)", unit:"each", rate:2.99, waste:0.05, calcHint:"one per hip base; SIG" },
+  { key:"sig_hip_tray", trade:"Roofing (SIG)", name:"FIX-R hip support tray 1.2m black (SIG)", unit:"each", rate:2.20, waste:0.05, calcHint:"hip length ÷ 1.2; SIG" },
+  { key:"sig_batten", trade:"Roofing (SIG)", name:"SRT 25×50 premium gold batten BS5534 (SIG)", unit:"lm", rate:0.62, waste:0.05, calcHint:"roof area × batten gauge; SIG £62/100m" },
+  { key:"sig_membrane", trade:"Roofing (SIG)", name:"Permavent PVBA50 breather membrane 1m×50m (SIG)", unit:"roll", rate:103.95, waste:0.0, calcHint:"roof area ÷ ~50m² per roll; SIG" },
+  { key:"sig_eaves_strip", trade:"Roofing (SIG)", name:"IKO eaves protection strip 330mm×16m (SIG)", unit:"roll", rate:23.0, waste:0.0, calcHint:"eaves length ÷ 16; SIG" },
+  { key:"sig_slate_dryverge", trade:"Roofing (SIG)", name:"Kytun slate dry verge, alu 3m (SIG)", unit:"each", rate:19.56, waste:0.05, calcHint:"verge length ÷ 3; SIG" },
+  { key:"sig_slate_dryverge_join", trade:"Roofing (SIG)", name:"Kytun slate dry verge jointer (SIG)", unit:"each", rate:2.66, waste:0.0, calcHint:"between verge units; SIG" },
+  { key:"sig_tile_dryverge", trade:"Roofing (SIG)", name:"Kytun plain tile dry verge unit 3m (SIG)", unit:"each", rate:27.15, waste:0.05, calcHint:"verge length ÷ 3; SIG" },
+  { key:"sig_tile_dryverge_join", trade:"Roofing (SIG)", name:"Kytun plain tile verge trim joiner (SIG)", unit:"each", rate:2.65, waste:0.0, calcHint:"between verge units; SIG" },
+  { key:"sig_eaves_clip", trade:"Roofing (SIG)", name:"Sandtoft New Gen eaves clip (SIG)", unit:"each", rate:0.18, waste:0.05, calcHint:"eaves course; SIG £17.55/100" },
+  { key:"sig_tile_clip", trade:"Roofing (SIG)", name:"Sandtoft New Gen tile clip (SIG)", unit:"each", rate:0.15, waste:0.05, calcHint:"per tile as specified; SIG £14.79/100" },
+  { key:"sig_lead_c3_150_3", trade:"Roofing (SIG)", name:"ALM Envirolead Code 3 150mm×3m (SIG)", unit:"roll", rate:15.85, waste:0.05, calcHint:"flashing/soakers; SIG" },
+  { key:"sig_lead_c3_150_6", trade:"Roofing (SIG)", name:"ALM Envirolead Code 3 150mm×6m (SIG)", unit:"roll", rate:29.43, waste:0.05, calcHint:"flashing/soakers; SIG" },
+  { key:"sig_lead_c3_240_3", trade:"Roofing (SIG)", name:"ALM Envirolead Code 3 240mm×3m (SIG)", unit:"roll", rate:24.90, waste:0.05, calcHint:"flashing/soakers; SIG" },
+  { key:"sig_lead_c3_240_6", trade:"Roofing (SIG)", name:"ALM Envirolead Code 3 240mm×6m (SIG)", unit:"roll", rate:49.80, waste:0.05, calcHint:"flashing/soakers; SIG" },
+  { key:"sig_lead_c4_150_6", trade:"Roofing (SIG)", name:"ALM Envirolead Code 4 150mm×6m (SIG)", unit:"roll", rate:40.75, waste:0.05, calcHint:"flashing/soakers; SIG" },
+  { key:"sig_lead_c4_300_3", trade:"Roofing (SIG)", name:"ALM Envirolead Code 4 300mm×3m (SIG)", unit:"roll", rate:40.75, waste:0.05, calcHint:"flashing/soakers; SIG" },
+  { key:"sig_lead_c4_300_6", trade:"Roofing (SIG)", name:"ALM Envirolead Code 4 300mm×6m (SIG)", unit:"roll", rate:83.76, waste:0.05, calcHint:"flashing/soakers; SIG" },
+  { key:"sig_lead_c5_450_3", trade:"Roofing (SIG)", name:"ALM Envirolead Code 5 450mm×3m (SIG)", unit:"roll", rate:76.96, waste:0.05, calcHint:"valleys/flashing; SIG" },
+  { key:"sig_copper_clout", trade:"Roofing (SIG)", name:"SITEFIX copper clout nails 38mm, 1kg (SIG)", unit:"bag", rate:15.05, waste:0.0, calcHint:"slate fixing; SIG" },
+  { key:"sig_alu_clout", trade:"Roofing (SIG)", name:"SITEFIX aluminium clout nails 45mm, 1kg (SIG)", unit:"bag", rate:10.25, waste:0.0, calcHint:"batten/tile fixing; SIG" },
+  { key:"sig_ringshank", trade:"Roofing (SIG)", name:"Fischer ring-shank nails 3.1×63mm, 2200/box (SIG)", unit:"box", rate:28.50, waste:0.0, calcHint:"batten fixing; SIG" },
+  { key:"sig_bedding_mortar", trade:"Roofing (SIG)", name:"FP McCann roof tile bedding mortar 20kg (SIG)", unit:"bag", rate:5.65, waste:0.0, calcHint:"ridge/verge bedding; SIG" },
   { key:"loft_insul", trade:"Insulation", name:"Loft / roof insulation (per m²)", unit:"m²", rate:7.0, waste:0.05, calcHint:"roof/ceiling area at spec depth" },
   { key:"acoustic_insul", trade:"Insulation", name:"Acoustic insulation to walls/floors (per m²)", unit:"m²", rate:6.0, waste:0.05, calcHint:"internal walls/floors as specified" },
-  { key:"screed", trade:"Internal & finishes", name:"Floor screed (per m²)", unit:"m²", rate:16.0, waste:0.05, calcHint:"floor area, ~65mm" },
+  { key:"screed", trade:"Internal & finishes", name:"Liquid screed (Cemfloor), supply & pump", unit:"m²", rate:19.72, waste:0.05, calcHint:"floor area m²; ~£19.72/m² @50mm, ~£24.68/m² @75mm (Clockwork Screed)" },
   { key:"skirting", trade:"Internal & finishes", name:"Skirting (per lm)", unit:"lm", rate:3.5, waste:0.10, calcHint:"room perimeters" },
   { key:"architrave", trade:"Internal & finishes", name:"Architrave (per lm)", unit:"lm", rate:2.8, waste:0.10, calcHint:"~5 lm per door" },
   { key:"int_door", trade:"Internal & finishes", name:"Internal door + lining + ironmongery", unit:"each", rate:110.0, waste:0, calcHint:"1 per doorway" },
@@ -107,6 +141,42 @@ const LIBRARY = [
   { key:"fixings", trade:"Fixings & sundries", name:"Fixings & fasteners allowance", unit:"item", rate:250.0, waste:0, calcHint:"general build allowance" },
   { key:"foam", trade:"Fixings & sundries", name:"Expanding foam (can)", unit:"can", rate:6.0, waste:0, calcHint:"gap filling" },
   { key:"plasticiser", trade:"Fixings & sundries", name:"Mortar plasticiser (5L)", unit:"tub", rate:7.0, waste:0, calcHint:"mortar additive" },
+  { key:"garage_door", trade:"Windows & doors", name:"Garage door (up-and-over / sectional)", unit:"each", rate:900.0, waste:0, calcHint:"1 per garage door" },
+  { key:"bifold_door", trade:"Windows & doors", name:"Bi-fold door (per leaf)", unit:"each", rate:600.0, waste:0, calcHint:"1 per bi-fold leaf" },
+  { key:"french_door", trade:"Windows & doors", name:"French / patio doors (pair)", unit:"each", rate:700.0, waste:0, calcHint:"1 per French/patio door set" },
+  { key:"rooflight", trade:"Windows & doors", name:"Rooflight / Velux", unit:"each", rate:350.0, waste:0, calcHint:"1 per rooflight" },
+  { key:"steel_beam", trade:"Superstructure", name:"Structural steel beam (RSJ/UB, per lm)", unit:"lm", rate:45.0, waste:0.05, calcHint:"span/opening width + bearings — engineer's design" },
+  { key:"padstone", trade:"Superstructure", name:"Padstone (concrete)", unit:"each", rate:12.0, waste:0.05, calcHint:"1 per beam bearing" },
+  { key:"wall_tie", trade:"External envelope", name:"Cavity wall ties (S/S, box 250)", unit:"box", rate:80.0, waste:0.05, calcHint:"2.5 ties per m² ÷ 250 (masonry cavity)" },
+  { key:"rodding_eye", trade:"Drainage", name:"Rodding eye / access point", unit:"each", rate:18.0, waste:0, calcHint:"1 per rodding/access point" },
+  { key:"channel_drain", trade:"Drainage", name:"Channel drain (ACO, per lm)", unit:"lm", rate:22.0, waste:0.05, calcHint:"length of channel drain" },
+  { key:"soakaway", trade:"Drainage", name:"Soakaway crate", unit:"each", rate:40.0, waste:0.05, calcHint:"1 per crate — see engineer's soakaway design" },
+  { key:"dot_dab", trade:"Internal & finishes", name:"Plasterboard adhesive (dot & dab)", unit:"bag", rate:8.0, waste:0, calcHint:"~1 bag per 2 boards" },
+  { key:"coving", trade:"Internal & finishes", name:"Coving (per lm)", unit:"lm", rate:2.5, waste:0.10, calcHint:"room perimeters" },
+  { key:"pir_board", trade:"Insulation", name:"Rigid PIR insulation board (per m²)", unit:"m²", rate:12.0, waste:0.05, calcHint:"walls/roof as specified" },
+  { key:"insul_poured", trade:"Insulation", name:"Poured insulation (liquid, e.g. Clockwork)", unit:"m²", rate:59.20, waste:0.0, calcHint:"floor area m²; ~£59/m² @290mm depth (Clockwork Screed inv)" },
+  { key:"consumer_unit", trade:"Electrical", name:"Consumer unit / fuse board", unit:"each", rate:120.0, waste:0, calcHint:"1 per dwelling" },
+  { key:"elec_point", trade:"Electrical", name:"Electrical point (socket/switch/light)", unit:"each", rate:35.0, waste:0, calcHint:"per point" },
+  { key:"electrical_prov", trade:"Electrical", name:"Electrical install (provisional)", unit:"item", rate:5000.0, waste:0, calcHint:"provisional sum — full first & second fix" },
+  { key:"boiler", trade:"Plumbing & heating", name:"Boiler (combi / system)", unit:"each", rate:1200.0, waste:0, calcHint:"1 per dwelling" },
+  { key:"radiator", trade:"Plumbing & heating", name:"Radiator (supply & fit)", unit:"each", rate:120.0, waste:0, calcHint:"1 per radiator" },
+  { key:"heat_pipe", trade:"Plumbing & heating", name:"Heating / water pipe (per lm)", unit:"lm", rate:3.0, waste:0.05, calcHint:"pipe runs" },
+  { key:"cylinder", trade:"Plumbing & heating", name:"Hot water cylinder", unit:"each", rate:600.0, waste:0, calcHint:"1 per dwelling" },
+  { key:"ufh", trade:"Plumbing & heating", name:"Underfloor heating (per m²)", unit:"m²", rate:25.0, waste:0.05, calcHint:"heated floor area" },
+  { key:"mvhr", trade:"Plumbing & heating", name:"MVHR ventilation system", unit:"item", rate:2500.0, waste:0, calcHint:"1 per dwelling — specialist" },
+  { key:"plumb_prov", trade:"Plumbing & heating", name:"Plumbing & heating — full package, supply & fit incl. labour", unit:"item", rate:55300.0, waste:0, calcHint:"quoted sum — heat pump, cylinder, UFH all floors, 1st/2nd fix, 2× SVP, insulated u/g pipework, pressure test. Excl: screed, insulation, groundworks, bathroom goods, mastic, MCS cert (+£420)" },
+  { key:"paint", trade:"Decoration", name:"Paint / emulsion (per m²)", unit:"m²", rate:4.0, waste:0.05, calcHint:"wall/ceiling area, 2 coats" },
+  { key:"decoration_prov", trade:"Decoration", name:"Decoration (provisional)", unit:"item", rate:4000.0, waste:0, calcHint:"provisional sum — full decoration" },
+  { key:"carpet", trade:"Floor coverings", name:"Carpet (per m²)", unit:"m²", rate:18.0, waste:0.10, calcHint:"carpeted floor area" },
+  { key:"lvt", trade:"Floor coverings", name:"LVT / laminate flooring (per m²)", unit:"m²", rate:25.0, waste:0.10, calcHint:"floor area" },
+  { key:"driveway", trade:"External works", name:"Driveway / paving (per m²)", unit:"m²", rate:45.0, waste:0.05, calcHint:"driveway/paving area" },
+  { key:"fencing", trade:"External works", name:"Fencing (per lm)", unit:"lm", rate:35.0, waste:0.05, calcHint:"fence run" },
+  { key:"turf", trade:"External works", name:"Turf / landscaping (per m²)", unit:"m²", rate:8.0, waste:0.05, calcHint:"landscaped area" },
+  { key:"patio", trade:"External works", name:"Patio slabs (per m²)", unit:"m²", rate:40.0, waste:0.05, calcHint:"patio area" },
+  { key:"scaffolding", trade:"Preliminaries", name:"Scaffolding (provisional)", unit:"item", rate:3500.0, waste:0, calcHint:"provisional sum" },
+  { key:"skip", trade:"Preliminaries", name:"Skip hire", unit:"each", rate:250.0, waste:0, calcHint:"per skip" },
+  { key:"plant_hire", trade:"Preliminaries", name:"Plant & tool hire (provisional)", unit:"item", rate:1500.0, waste:0, calcHint:"provisional sum" },
+  { key:"welfare", trade:"Preliminaries", name:"Site set-up / welfare (provisional)", unit:"item", rate:2000.0, waste:0, calcHint:"provisional sum" },
 ];
 const BY_KEY = Object.fromEntries(LIBRARY.map((m) => [m.key, m]));
 const LIB_KEYS = LIBRARY.map((m) => m.key);
@@ -213,6 +283,23 @@ async function runTakeoff(files) {
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 
+// ---------- CLOUD SAVE (shared) ----------
+// If DATABASE_URL is set (e.g. a free Neon Postgres), saved take-offs live in the
+// cloud and sync across every device/person. If it's NOT set, the app still works —
+// it just falls back to saving in the browser on each device (as before).
+let pool = null;
+const DB_URL = process.env.DATABASE_URL;
+if (DB_URL) {
+  const isLocal = /localhost|127\.0\.0\.1/.test(DB_URL) || process.env.PGSSL === "off";
+  pool = new pg.Pool({ connectionString: DB_URL, ssl: isLocal ? false : { rejectUnauthorized: false } });
+  pool.query(
+    "CREATE TABLE IF NOT EXISTS takeoffs (name TEXT PRIMARY KEY, payload JSONB NOT NULL, updated_at TIMESTAMPTZ DEFAULT now())"
+  ).then(() => console.log("[cloud] connected — takeoffs table ready"))
+   .catch((e) => { console.error("[cloud] DB init failed:", e.message); pool = null; });
+} else {
+  console.log("[cloud] DATABASE_URL not set — using per-device browser save");
+}
+
 // Optional shared-password gate (set ACCESS_PASSWORD in the host to enable).
 app.use((req, res, next) => {
   const pw = process.env.ACCESS_PASSWORD;
@@ -223,8 +310,56 @@ app.use((req, res, next) => {
   res.set("WWW-Authenticate", 'Basic realm="TakeOff"').status(401).send("Authentication required");
 });
 
+app.use(express.json({ limit: "8mb" }));
+
 app.get("/", (_req, res) => res.type("html").send(fs.readFileSync(path.join(__dirname, "index.html"), "utf8")));
 app.get("/api/library", (_req, res) => res.json(LIBRARY));
+
+// ---------- Cloud save API (shared list of take-offs) ----------
+// List saved take-offs. If no DB configured, tell the app to use browser save.
+app.get("/api/takeoffs", async (_req, res) => {
+  if (!pool) return res.json({ cloud: false, names: [] });
+  try {
+    const r = await pool.query("SELECT name FROM takeoffs ORDER BY name ASC");
+    res.json({ cloud: true, names: r.rows.map((x) => x.name) });
+  } catch (e) { console.error("[cloud] list failed:", e.message); res.status(500).json({ error: "Could not list saved take-offs." }); }
+});
+
+// Load one saved take-off by name.
+app.get("/api/takeoffs/:name", async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "Cloud save is not configured." });
+  try {
+    const r = await pool.query("SELECT payload FROM takeoffs WHERE name = $1", [req.params.name]);
+    if (!r.rows.length) return res.status(404).json({ error: "Not found." });
+    res.json(r.rows[0].payload);
+  } catch (e) { console.error("[cloud] load failed:", e.message); res.status(500).json({ error: "Could not load take-off." }); }
+});
+
+// Save (create or overwrite by name).
+app.post("/api/takeoffs", async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "Cloud save is not configured." });
+  const name = (req.body && req.body.name || "").trim();
+  const payload = req.body && req.body.payload;
+  if (!name) return res.status(400).json({ error: "A project name is required." });
+  if (!payload || typeof payload !== "object") return res.status(400).json({ error: "Nothing to save." });
+  try {
+    await pool.query(
+      "INSERT INTO takeoffs (name, payload, updated_at) VALUES ($1, $2, now()) " +
+      "ON CONFLICT (name) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()",
+      [name, payload]
+    );
+    res.json({ ok: true, name });
+  } catch (e) { console.error("[cloud] save failed:", e.message); res.status(500).json({ error: "Could not save take-off." }); }
+});
+
+// Delete by name.
+app.delete("/api/takeoffs/:name", async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "Cloud save is not configured." });
+  try {
+    await pool.query("DELETE FROM takeoffs WHERE name = $1", [req.params.name]);
+    res.json({ ok: true });
+  } catch (e) { console.error("[cloud] delete failed:", e.message); res.status(500).json({ error: "Could not delete take-off." }); }
+});
 app.post("/api/takeoff", upload.array("drawings", 12), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: "No drawings uploaded." });
